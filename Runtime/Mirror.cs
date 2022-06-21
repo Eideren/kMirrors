@@ -61,6 +61,7 @@ namespace kTools.Mirrors
         UniversalAdditionalCameraData m_CameraData;
         RenderTexture m_RenderTexture;
         RenderTextureDescriptor m_PreviousDescriptor;
+        string m_identifier;
 #endregion
 
 #region Constructors
@@ -200,6 +201,17 @@ namespace kTools.Mirrors
             var renderTextureFormat = hdr ? RenderTextureFormat.DefaultHDR : RenderTextureFormat.Default;
             return new RenderTextureDescriptor(width, height, renderTextureFormat, 16) { autoGenerateMips = true, useMipMap = true };
         }
+        
+        bool DescriptorEquality(RenderTextureDescriptor a, RenderTextureDescriptor b)
+        {
+            return
+                a.width == b.width
+                && a.height == b.height
+                && a.colorFormat == b.colorFormat
+                && a.autoGenerateMips == b.autoGenerateMips
+                && a.useMipMap == b.useMipMap
+                && a.depthBufferBits == b.depthBufferBits;
+        }
 #endregion
 
 #region Rendering
@@ -211,15 +223,16 @@ namespace kTools.Mirrors
             if(PauseRendering)
                 return;
 
+            m_identifier ??= $"Mirror {gameObject.GetInstanceID()}";
             // Profiling command
-            CommandBuffer cmd = CommandBufferPool.Get($"Mirror {gameObject.GetInstanceID()}");
-            using (new ProfilingSample(cmd, $"Mirror {gameObject.GetInstanceID()}"))
+            CommandBuffer cmd = CommandBufferPool.Get(m_identifier);
+            using (new ProfilingSample(cmd, m_identifier))
             {
                 ExecuteCommand(context, cmd);
 
                 // Test for Descriptor changes
                 var descriptor = GetDescriptor(camera);
-                if(!descriptor.Equals(m_PreviousDescriptor))
+                if(!DescriptorEquality(descriptor, m_PreviousDescriptor))
                 {
                     // Dispose RenderTexture
                     if(m_RenderTexture != null)
@@ -238,6 +251,7 @@ namespace kTools.Mirrors
                 SetShaderUniforms(context, m_RenderTexture, cmd);
             }
             ExecuteCommand(context, cmd);
+            CommandBufferPool.Release(cmd);
         }
 
         void RenderMirror(ScriptableRenderContext context, Camera camera)
@@ -310,7 +324,7 @@ namespace kTools.Mirrors
 #region Output
         void SetShaderUniforms(ScriptableRenderContext context, RenderTexture renderTexture, CommandBuffer cmd)
         {
-            var block = new MaterialPropertyBlock();
+            var block = renderers.Count == 0 ? null : new MaterialPropertyBlock();
             switch(scope)
             {
                 case OutputScope.Global:
@@ -318,8 +332,8 @@ namespace kTools.Mirrors
                     cmd.SetGlobalTexture("_ReflectionMap", renderTexture);
                     ExecuteCommand(context, cmd);
 
-                    // Property Blocm
-                    block.SetFloat("_LocalMirror", 0.0f);
+                    // Property Block
+                    block?.SetFloat("_LocalMirror", 0.0f);
                     foreach(var renderer in renderers)
                     {
                         renderer.SetPropertyBlock(block);
@@ -330,8 +344,8 @@ namespace kTools.Mirrors
                     Shader.EnableKeyword("_BLEND_MIRRORS");
 
                     // Property Block
-                    block.SetTexture("_LocalReflectionMap", renderTexture);
-                    block.SetFloat("_LocalMirror", 1.0f);
+                    block?.SetTexture("_LocalReflectionMap", renderTexture);
+                    block?.SetFloat("_LocalMirror", 1.0f);
                     foreach(var renderer in renderers)
                     {
                         renderer.SetPropertyBlock(block);
