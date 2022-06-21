@@ -130,6 +130,9 @@ namespace kTools.Mirrors
             set => m_AllowMSAA = value;
         }
 
+        /// <summary>Should we avoid updating reflections.</summary>
+        public bool PauseRendering{ get; set; }
+        
         Camera reflectionCamera
         {
             get
@@ -204,6 +207,8 @@ namespace kTools.Mirrors
         {
             // Never render Mirrors for Preview or Reflection cameras
             if(camera.cameraType == CameraType.Preview || camera.cameraType == CameraType.Reflection)
+                return;
+            if(PauseRendering)
                 return;
 
             // Profiling command
